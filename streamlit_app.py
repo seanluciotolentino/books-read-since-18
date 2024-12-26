@@ -15,6 +15,7 @@ def load_data():
     books_df.genre.fillna('other', inplace=True) 
     books_df['date read'] = pd.to_datetime(books_df['date read'])
     books_df['stars'] = books_df.stars.apply(int)
+    books_df['pages'] = books_df.pages.apply(int)
     books_df['Year Read'] = books_df['date read'].dt.year 
 
     return books_df
