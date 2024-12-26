@@ -1,3 +1,4 @@
 streamlit==1.25.0  # Adjust version to latest if needed
 pandas==2.1.1  # Ensure compatibility with latest Streamlit
 plotly==5.17.0  # For interactive plots
+gspread==6.1.4

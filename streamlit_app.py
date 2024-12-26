@@ -5,12 +5,18 @@ import plotly.graph_objects as go
 import plotly.subplots as sp
 import requests
 from datetime import datetime
+from google.oauth2 import service_account
+import gspread
+import json
 
-# Load CSV data
 def load_data():
-    books_df = pd.read_csv("books.csv")
-    books_df.genre.fillna('other', inplace=True)
-    books_df['Year Read'] = books_df['date read']  # Date Read is just the year
+    data = sheet.get_all_values()
+    books_df = pd.DataFrame(data[1:], columns=data[0]) 
+    books_df.genre.fillna('other', inplace=True) 
+    books_df['date read'] = pd.to_datetime(books_df['date read'])
+    books_df['stars'] = books_df.stars.apply(int)
+    books_df['Year Read'] = books_df['date read'].dt.year 
+
     return books_df
 
 # Function to add a new book
@@ -23,7 +29,7 @@ def add_book(title, author, genre, stars):
         book_info = response.json()['docs'][0]
     else:
         book_info = {}
-    pages = book_info.get('number_of_pages_median', 'N/A')
+    pages = int(book_info.get('number_of_pages_median', 'N/A'))
     published_date = book_info.get('first_publish_year', 'N/A')
 
     new_book = {
@@ -40,15 +46,19 @@ def add_book(title, author, genre, stars):
 def classify_fiction_nonfiction(df):
     return df['genre'].apply(lambda g: 'Non-Fiction' if g.lower() in ['nonfiction', 'memoir'] else 'Fiction')
 
-
-# Load the books data
-st.set_page_config(layout="wide")
+# setup connection to google sheets
+secrets = json.loads(st.secrets['google_cloud']["credentials"].replace('\n', ''))
+secrets['private_key'] = st.secrets['private_key']
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = service_account.Credentials.from_service_account_info(secrets, scopes=scope)
+client = gspread.authorize(creds)
+sheet = client.open('emmas books').sheet1 
 books_df = load_data()
 
-print(books_df.genre.unique())
-
-# App layout
+# set up the data
+st.set_page_config(layout="wide")
 st.title("Books I've Read Dashboard")
+st.markdown("[Books stored on Google Sheets](https://docs.google.com/spreadsheets/d/1A534GEJJ9oWsNyHGKcUZPVPoEwfqSxez1ICupdqLWRI/edit?usp=sharing)")
 
 # =========================
 # ===== ADD A BOOK ========
@@ -61,8 +71,14 @@ with st.expander("Add a Book"):
     
     if st.button("Add Book"):
         new_book = add_book(title, author, genre, stars)
-        books_df = pd.concat([books_df, pd.DataFrame([new_book])], ignore_index=True)
-        books_df.to_csv("books.csv", index=False)
+        #books_df = pd.concat([books_df, pd.DataFrame([new_book])], ignore_index=True)
+        #books_df.to_csv("books.csv", index=False)
+        # with google sheets instead of CSVs
+        current_data = sheet.get_all_values()
+        df = pd.DataFrame(current_data[1:], columns=current_data[0])
+        df = pd.concat([df, pd.DataFrame([new_book])], ignore_index=True)
+        sheet.clear()
+        sheet.update([df.columns.tolist()] + df.values.tolist())
         st.success("Book added!")
 
 # =========================
@@ -71,7 +87,7 @@ with st.expander("Add a Book"):
 total_books = len(books_df)
 books_this_year = len(books_df[books_df['date read'] == datetime.now().year])
 total_pages = int(books_df['pages'].sum())
-average_books_per_year = books_df[books_df['date read'] > 2011].groupby('date read').size().mean()
+average_books_per_year = books_df[books_df['date read'].dt.year > 2011].groupby('date read').size().mean()
 most_recent_book = books_df.sort_values('date read', ascending=False).iloc[0]['title']
 
 col1, col2, col3, col4, col5 = st.columns(5)
@@ -105,7 +121,7 @@ genre_all_time = books_df.groupby('genre').size().reset_index(name="Count")
 
 
 # List of unique years
-years = books_df['Year Read'].unique()
+years = books_df['Year Read'].dt.year.unique().tolist()
 years.sort()
 
 # First column: Pie chart for all-time genres
@@ -166,10 +182,6 @@ books_df['Category'] = classify_fiction_nonfiction(books_df)
 
 # Prepare data for the pie charts
 fiction_vs_nonfiction_all_time = books_df.groupby('Category').size().reset_index(name="Count")
-
-# List of unique years
-years = books_df['Year Read'].unique()
-years.sort()
 
 # First column: Pie chart for all-time fiction vs non-fiction
 labels_all_time = fiction_vs_nonfiction_all_time['Category']
