@@ -9,6 +9,7 @@ from google.oauth2 import service_account
 import gspread
 import json
 
+import math
 def load_data():
     data = sheet.get_all_values()
     books_df = pd.DataFrame(data[1:], columns=data[0]) 
@@ -30,7 +31,10 @@ def add_book(title, author, genre, stars):
         book_info = response.json()['docs'][0]
     else:
         book_info = {}
-    pages = int(book_info.get('number_of_pages_median', 'N/A'))
+    try:
+        pages = int(book_info.get('number_of_pages_median', 0))
+    except (ValueError, TypeError):
+        pages = 0
     published_date = book_info.get('first_publish_year', 'N/A')
 
     new_book = {
@@ -57,7 +61,7 @@ sheet = client.open('emmas books').sheet1
 books_df = load_data()
 
 # set up the data
-st.set_page_config(layout="wide")
+st.set_page_config(layout="centered")
 st.title("Books I've Read Dashboard")
 st.markdown("[Books stored on Google Sheets](https://docs.google.com/spreadsheets/d/1A534GEJJ9oWsNyHGKcUZPVPoEwfqSxez1ICupdqLWRI/edit?usp=sharing)")
 
@@ -86,24 +90,28 @@ with st.expander("Add a Book"):
 # ===== BIG NUMBERS ========
 # =========================
 total_books = len(books_df)
-books_this_year = len(books_df[books_df['date read'] == datetime.now().year])
+books_this_year = len(books_df[books_df['Year Read'] == datetime.now().year])
 total_pages = int(books_df['pages'].sum())
+pages_this_year = int(books_df[books_df['Year Read'] == datetime.now().year]['pages'].sum())
 average_books_per_year = books_df[books_df['date read'].dt.year > 2011].groupby('date read').size().mean()
 most_recent_book = books_df.sort_values('date read', ascending=False).iloc[0]['title']
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Total Books Read", total_books)
-col2.metric("Books Read This Year", books_this_year)
-col3.metric("Avg Books Per Year", f"{average_books_per_year:.2f}")
-col4.metric("Total Pages Read", f"{total_pages:,}")
-col5.metric("Most Recent Book", most_recent_book)
+st.metric("Most Recent Book", most_recent_book)
+col1, col2 = st.columns(2)
+with col1:
+    col1.metric("Books Read This Year", books_this_year)
+    col1.metric("Pages Read This Year", pages_this_year)
+
+with col2:
+    col2.metric("Total Books Read", total_books)
+    col2.metric("Total Pages Read", f"{total_pages:,}")
 
 # =========================
 # ===== LINE CHART ========
 # =========================
 
 st.subheader("Genres Over Time")
-books_df['Year Read'] = books_df['date read']  # Date Read is just the year
+
 genres_over_time = books_df.groupby(['Year Read', 'genre']).size().unstack(fill_value=0)
 
 # Plotly Time Series Plot
@@ -122,7 +130,7 @@ genre_all_time = books_df.groupby('genre').size().reset_index(name="Count")
 
 
 # List of unique years
-years = books_df['Year Read'].dt.year.unique().tolist()
+years = books_df['Year Read'].unique().tolist()
 years.sort()
 
 # First column: Pie chart for all-time genres
@@ -135,8 +143,10 @@ fig_all_time = go.Figure(data=[go.Pie(labels=all_time_labels, values=all_time_va
 
 # Second column: Grid of pie charts (5 columns x 3 rows) for genres by year
 
-fig_grid = sp.make_subplots(rows=3, cols=5, subplot_titles=[str(year) for year in years],
-                            specs=[[{'type': 'domain'}]*5]*3)
+n_cols = 5
+n_rows = math.ceil(len(years) / n_cols)
+fig_grid = sp.make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[str(year) for year in years],
+                            specs=[[{'type': 'domain'}]*n_cols]*n_rows)
 
 # Add pie charts for each year
 row, col = 1, 1
@@ -156,7 +166,7 @@ for year in years:
     
     # Update column and row positions for the grid layout
     col += 1
-    if col > 5:
+    if col > n_cols:
         col = 1
         row += 1
 
@@ -191,8 +201,8 @@ values_all_time = fiction_vs_nonfiction_all_time['Count']
 fig_all_time = go.Figure(data=[go.Pie(labels=labels_all_time, values=values_all_time, text=labels_all_time, hoverinfo='label+percent', textinfo='text')])
 
 # Second column: Grid of pie charts (5 columns x 3 rows) for fiction vs non-fiction by year
-fig_grid = sp.make_subplots(rows=3, cols=5, subplot_titles=[str(year) for year in years],
-                            specs=[[{'type': 'domain'}]*5]*3)
+fig_grid = sp.make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[str(year) for year in years],
+                            specs=[[{'type': 'domain'}]*n_cols]*n_rows)
 
 # Add pie charts for each year
 row, col = 1, 1
@@ -212,7 +222,7 @@ for year in years:
     
     # Update column and row positions for the grid layout
     col += 1
-    if col > 5:
+    if col > n_cols:
         col = 1
         row += 1
 
