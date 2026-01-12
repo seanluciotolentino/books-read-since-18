@@ -18,8 +18,12 @@ def load_data():
     books_df['stars'] = pd.to_numeric(books_df.stars)
     books_df['pages'] = pd.to_numeric(books_df.pages)
     books_df['Year Read'] = books_df['date read'].dt.year 
+    
+    # Filter for books read since 2012
+    books_df = books_df[books_df['Year Read'] >= 2012]
 
     return books_df
+
 
 # Function to add a new book
 def add_book(title, author, genre, stars):
@@ -60,31 +64,91 @@ client = gspread.authorize(creds)
 sheet = client.open('emmas books').sheet1 
 books_df = load_data()
 
+# --- ICONS (Noun Project Style) ---
+ICONS = {
+    "book": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24" fill="currentColor"><path d="M80,10H30c-5.5,0-10,4.5-10,10v60c0,5.5,4.5,10,10,10h50V10z M30,85c-2.8,0-5-2.2-5-5s2.2-5,5-5h45v10H30z M75,70H30 c-2.8,0-5-2.2-5-5V20c0-2.8,2.2-5,5-5h45V70z"/></svg>',
+    "pages": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24" fill="currentColor"><path d="M75,10H25C19.5,10,15,14.5,15,20v60c0,5.5,4.5,10,10,10h50c5.5,0,10-4.5,10-10V20C85,14.5,80.5,10,75,10z M25,85 c-2.8,0-5-2.2-5-5V20c0-2.8,2.2-5,5-5h50c2.8,0,5,2.2,5,5v60c0,2.8-2.2,5-5,5H25z M30,30h40v5H30V30z M30,45h40v5H30V45z M30,60h40v5 H30V60z"/></svg>',
+    "calendar": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24" fill="currentColor"><path d="M80,15h-5v-5h-5v5H30v-5h-5v5h-5c-5.5,0-10,4.5-10,10v55c0,5.5,4.5,10,10,10h60c5.5,0,10-4.5,10-10V25 C90,19.5,85.5,15,80,15z M20,85V40h60v45H20z M80,30H20V25c0-2.8,2.2-5,5-5h5v5h5v-5h40v5h5v-5h5c2.8,0,5,2.2,5,5V30z"/></svg>',
+    "trending": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24" fill="currentColor"><path d="M90,75l-35-35l-15,15L10,25V15h10v5.9l25,25l15-15l35,35V75z M90,55l-5-5l5-5V55z"/></svg>',
+    "stars": '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="24" height="24" fill="currentColor"><path d="M50,10l12,25l28,4l-20,20l5,28l-25-13l-25,13l5-28l-20-20l28-4L50,10z"/></svg>'
+}
+
+def metric_with_icon(label, value, icon_key, font_size=1.8):
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
+        <span style="color: #FF4B4B;">{ICONS.get(icon_key, '')}</span>
+        <span style="font-size: 0.9rem; font-weight: 600; color: #9B9C9E;">{label}</span>
+    </div>
+    <div style="font-size: {font_size}rem; font-weight: 700;">{value}</div>
+    """, unsafe_allow_html=True)
+
 # set up the data
-st.set_page_config(layout="centered")
-st.title("Books I've Read Dashboard")
-st.markdown("[Books stored on Google Sheets](https://docs.google.com/spreadsheets/d/1A534GEJJ9oWsNyHGKcUZPVPoEwfqSxez1ICupdqLWRI/edit?usp=sharing)")
+st.set_page_config(layout="wide", page_title="Books Dashboard", page_icon="📚")
+
+def local_css():
+    st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Outfit', sans-serif;
+        }
+        
+        /* Metric Cards */
+        div[data-testid="metric-container"] {
+            background-color: #262730; /* Dark card background */
+            border: 1px solid #3d3d3d;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+        
+        /* Custom header style */
+        .custom-header {
+            font-weight: 700;
+            font-size: 2.5rem;
+            background: -webkit-linear-gradient(45deg, #FF4B4B, #FF9100);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 1rem;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+local_css()
+
+
 
 # =========================
-# ===== ADD A BOOK ========
+# ===== SIDEBAR: ADD BOOK =
 # =========================
-with st.expander("Add a Book"):
-    title = st.text_input("Book Title")
-    author = st.text_input("Author")
-    genre = st.selectbox("Genre", books_df.genre.unique())
-    stars = st.number_input("Stars?", min_value=0)
-    
-    if st.button("Add Book"):
-        new_book = add_book(title, author, genre, stars)
-        #books_df = pd.concat([books_df, pd.DataFrame([new_book])], ignore_index=True)
-        #books_df.to_csv("books.csv", index=False)
-        # with google sheets instead of CSVs
-        current_data = sheet.get_all_values()
-        df = pd.DataFrame(current_data[1:], columns=current_data[0])
-        df = pd.concat([df, pd.DataFrame([new_book])], ignore_index=True)
-        sheet.clear()
-        sheet.update([df.columns.tolist()] + df.values.tolist())
-        st.success("Book added!")
+with st.sidebar:
+    st.markdown(f'<div style="display:flex; align-items:center; gap:10px;">{ICONS["book"]} <h2 style="margin:0;">Add a New Book</h2></div>', unsafe_allow_html=True)
+    with st.form("add_book_form", clear_on_submit=True):
+        st.markdown("[View GSheet Source](https://docs.google.com/spreadsheets/d/1A534GEJJ9oWsNyHGKcUZPVPoEwfqSxez1ICupdqLWRI/edit?usp=sharing)")
+        title = st.text_input("Book Title")
+        author = st.text_input("Author")
+        genre = st.selectbox("Genre", books_df.genre.unique())
+        stars = st.radio("Rating", options=[0, 1, 2], format_func=lambda x: ["0 (Unrated)", "1 (Good)", "2 (Loved)"][x], horizontal=True)
+        
+        submitted = st.form_submit_button("Add Book", use_container_width=True)
+
+
+        if submitted:
+            if title and author:
+                new_book = add_book(title, author, genre, stars)
+                # Google Sheets update
+                current_data = sheet.get_all_values()
+                df = pd.DataFrame(current_data[1:], columns=current_data[0])
+                df = pd.concat([df, pd.DataFrame([new_book])], ignore_index=True)
+                sheet.clear()
+                sheet.update([df.columns.tolist()] + df.values.tolist())
+                st.success("✨ Book added successfully!")
+                st.balloons()
+            else:
+                st.error("Please enter both Title and Author.")
+
+st.title("Books Read Since 18")
 
 # =========================
 # ===== BIG NUMBERS ========
@@ -94,162 +158,175 @@ books_this_year = len(books_df[books_df['Year Read'] == datetime.now().year])
 total_pages = int(books_df['pages'].sum())
 pages_this_year = int(books_df[books_df['Year Read'] == datetime.now().year]['pages'].sum())
 average_books_per_year = books_df[books_df['date read'].dt.year > 2011].groupby('date read').size().mean()
+average_pages_per_year = books_df[books_df['date read'].dt.year > 2011]['pages'].mean()
 most_recent_book = books_df.sort_values('date read', ascending=False).iloc[0]['title']
 
-st.metric("Most Recent Book", most_recent_book)
+# Most Recent Book - Full Width
+with st.container():
+    metric_with_icon("Most Recent Book", most_recent_book, "book", font_size=2.5)
+
+st.write("") # Spacer
+
+# Metrics Grid
 col1, col2 = st.columns(2)
+
 with col1:
-    col1.metric("Books Read This Year", books_this_year)
-    col1.metric("Pages Read This Year", pages_this_year)
+    with st.container():
+        metric_with_icon("Total Books", total_books, "book")
+    with st.container():
+        metric_with_icon("Avg Books/Year", f"{average_books_per_year:.1f}", "trending")
+    with st.container():
+        metric_with_icon("Books This Year", books_this_year, "calendar")
 
 with col2:
-    col2.metric("Total Books Read", total_books)
-    col2.metric("Total Pages Read", f"{total_pages:,}")
+    with st.container():
+        metric_with_icon("Total Pages", f"{total_pages:,}", "pages")
+    with st.container():
+        metric_with_icon("Avg Pages/Year", f"{average_pages_per_year:.0f}", "trending")
+    with st.container():
+        metric_with_icon("Pages This Year", f"{pages_this_year:,}", "calendar")
+
+
+
+st.markdown("---")
+
 
 # =========================
 # ===== LINE CHART ========
 # =========================
 
-st.subheader("Genres Over Time")
+# =========================
+# ===== CHARTS ============
+# =========================
 
-genres_over_time = books_df.groupby(['Year Read', 'genre']).size().unstack(fill_value=0)
+st.subheader("Books Read by Genre per Year")
 
-# Plotly Time Series Plot
-time_series_fig = px.line(genres_over_time, 
-                          x=genres_over_time.index, 
-                          y=genres_over_time.columns, 
-                          labels={'value': 'Books', 'Year Read': 'Year'})
-st.plotly_chart(time_series_fig)
+# Prepare data for Stacked Bar Chart
+df_chart = books_df.groupby(['Year Read', 'genre']).size().reset_index(name='Count')
+df_chart = df_chart.sort_values('Year Read')
+# Ensure x-axis is treated as strings for stable categorical plotting
+df_chart['Year'] = df_chart['Year Read'].astype(str)
+
+# Calculate yearly totals for the labels
+yearly_totals = df_chart.groupby('Year Read')['Count'].sum().reset_index(name='Total')
+yearly_totals = yearly_totals.sort_values('Year Read')
+yearly_totals['Year'] = yearly_totals['Year Read'].astype(str)
+
+# Create the stacked bar chart
+fig_bar = px.bar(df_chart, 
+                 x="Year", 
+                 y="Count", 
+                 color="genre", 
+                 category_orders={"Year": df_chart['Year'].unique().tolist()},
+                 color_discrete_sequence=px.colors.qualitative.Prism)
+
+# Add totals as text labels using a separate scatter trace
+fig_bar.add_trace(go.Scatter(
+    x=yearly_totals['Year'],
+    y=yearly_totals['Total'],
+    mode='text',
+    text=yearly_totals['Total'].astype(str),
+    textposition='top center',
+    showlegend=False,
+    cliponaxis=False,
+    textfont=dict(color='#FF4B4B', size=14, family='Outfit') # Matching theme color
+))
+
+fig_bar.update_layout(
+    barmode='stack', 
+    template="plotly_dark",
+    xaxis_title="Year",
+    yaxis_title="Books Read",
+    legend_title="Genre",
+    yaxis=dict(range=[0, yearly_totals['Total'].max() * 1.2]) # More headroom for labels
+)
+st.plotly_chart(fig_bar, use_container_width=True)
 
 
 
-# ===================================
-# ===== GENRE PIE CHARTS ============
-# ===================================
-genre_all_time = books_df.groupby('genre').size().reset_index(name="Count")
 
 
-# List of unique years
-years = books_df['Year Read'].unique().tolist()
-years.sort()
+col_charts_1, col_charts_2 = st.columns(2)
 
-# First column: Pie chart for all-time genres
-all_time_labels = genre_all_time['genre']
-all_time_values = genre_all_time['Count']
 
-fig_all_time = go.Figure(data=[go.Pie(labels=all_time_labels, values=all_time_values, 
-                    hoverinfo='label+percent', textinfo='text', 
-                    title='Genre of all Books')])
-
-# Second column: Grid of pie charts (5 columns x 3 rows) for genres by year
-
-n_cols = 5
-n_rows = math.ceil(len(years) / n_cols)
-fig_grid = sp.make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[str(year) for year in years],
-                            specs=[[{'type': 'domain'}]*n_cols]*n_rows)
-
-# Add pie charts for each year
-row, col = 1, 1
-for year in years:
-    # Get genre counts for the specific year
-    genre_this_year = books_df[books_df['Year Read'] == year].groupby('genre').size().reset_index(name="Count")
+# DONUT: Genres All Time
+with col_charts_1:
+    st.subheader("Genres (All Time)")
+    genre_counts = books_df['genre'].value_counts().reset_index()
+    genre_counts.columns = ['genre', 'count']
     
-    # Apply percentage threshold for textinfo
-    labels = genre_this_year['genre']
-    values = genre_this_year['Count']
+    fig_donut = px.pie(genre_counts, values='count', names='genre', hole=0.5,
+                       color_discrete_sequence=px.colors.qualitative.Prism)
+    fig_donut.update_traces(textposition='inside', textinfo='percent+label')
+    fig_donut.update_layout(showlegend=False, template="plotly_dark")
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+# DONUT: Fiction vs Non-Fiction
+with col_charts_2:
+    st.subheader("Fiction vs Non-Fiction")
+    books_df['Category'] = classify_fiction_nonfiction(books_df)
+    cat_counts = books_df['Category'].value_counts().reset_index()
+    cat_counts.columns = ['Category', 'count']
     
-    # Add the pie chart for the year to the grid
-    fig_grid.add_trace(
-        go.Pie(labels=labels, values=values, hoverinfo='label+percent', textinfo='text'),
-        row=row, col=col
-    )
-    
-    # Update column and row positions for the grid layout
-    col += 1
-    if col > n_cols:
-        col = 1
-        row += 1
-
-# Update layout for the grid of pie charts
-fig_grid.update_layout(showlegend=False)
-
-# Display the new row with two columns
-with st.expander("Genre Pie Charts"):
-    col1, col2 = st.columns([2, 4])
-    # First column: all-time pie chart
-    col1.subheader('All Time')
-    col1.plotly_chart(fig_all_time)
-
-    # Second column: grid of pie charts by year
-    col2.subheader('By Year')
-    col2.plotly_chart(fig_grid)
-
-# ===================================
-# ===== FICTION PIE CHARTS ==========
-# ===================================
-
-# Apply classification to the entire dataframe
-books_df['Category'] = classify_fiction_nonfiction(books_df)
-
-# Prepare data for the pie charts
-fiction_vs_nonfiction_all_time = books_df.groupby('Category').size().reset_index(name="Count")
-
-# First column: Pie chart for all-time fiction vs non-fiction
-labels_all_time = fiction_vs_nonfiction_all_time['Category']
-values_all_time = fiction_vs_nonfiction_all_time['Count']
-
-fig_all_time = go.Figure(data=[go.Pie(labels=labels_all_time, values=values_all_time, text=labels_all_time, hoverinfo='label+percent', textinfo='text')])
-
-# Second column: Grid of pie charts (5 columns x 3 rows) for fiction vs non-fiction by year
-fig_grid = sp.make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[str(year) for year in years],
-                            specs=[[{'type': 'domain'}]*n_cols]*n_rows)
-
-# Add pie charts for each year
-row, col = 1, 1
-for year in years:
-    # Get fiction vs non-fiction counts for the specific year
-    fiction_vs_nonfiction_this_year = books_df[books_df['Year Read'] == year].groupby('Category').size().reset_index(name="Count")
-    
-    # Apply percentage threshold for textinfo
-    labels = fiction_vs_nonfiction_this_year['Category']
-    values = fiction_vs_nonfiction_this_year['Count']
-    
-    # Add the pie chart for the year to the grid
-    fig_grid.add_trace(
-        go.Pie(labels=labels, values=values, hoverinfo='label+percent', textinfo='text'),
-        row=row, col=col
-    )
-    
-    # Update column and row positions for the grid layout
-    col += 1
-    if col > n_cols:
-        col = 1
-        row += 1
-
-# Update layout for the grid of pie charts
-fig_grid.update_layout(showlegend=False)
+    fig_cat = px.pie(cat_counts, values='count', names='Category', hole=0.5,
+                     color_discrete_sequence=px.colors.qualitative.Pastel)  
+    fig_cat.update_traces(textposition='inside', textinfo='percent+label')
+    fig_cat.update_layout(showlegend=False, template="plotly_dark")
+    st.plotly_chart(fig_cat, use_container_width=True)
 
 
-# Display the new row with two columns
-with st.expander("Fiction vs Non-Fiction"):
-    col1, col2 = st.columns([2, 4])
-    # First column: all-time pie chart
-    col1.subheader('All Time')
-    col1.plotly_chart(fig_all_time)
-
-    # Second column: grid of pie charts by year
-    col2.subheader('By Year')
-    col2.plotly_chart(fig_grid)
 
 # ===================================
 # ===== STARRED BOOKS ==========
 # ===================================
-columns = ['title', 'author', 'Year Read']
-with st.expander("Starred Books"):
-    col1, col2, col3 = st.columns([1, 1, 1])
-    col1.subheader('Zero Star Books')
-    col1.dataframe(books_df.loc[books_df['stars'] <= 0, columns])
-    col2.subheader('One Star Books')
-    col2.dataframe(books_df.loc[books_df['stars'] == 1, columns])
-    col3.subheader('Two Star Books')
-    col3.dataframe(books_df.loc[books_df['stars'] >= 2, columns])
+# =========================
+# ===== STARRED BOOKS =
+# =========================
+st.subheader("Book Ratings & Search")
+
+# Search and Filter
+search_query = st.text_input("Search by Title, Author, or Genre", placeholder="Type to filter...")
+
+# Helper to render stars (0-2 scale)
+def get_star_string(rating):
+    if rating >= 2: return "⭐⭐ (Loved)"
+    if rating == 1: return "⭐ (Liked)"
+    return "0 (Unrated)"
+
+# Filter books based on search
+if search_query:
+    filtered_df = books_df[
+        books_df['title'].str.contains(search_query, case=False, na=False) |
+        books_df['author'].str.contains(search_query, case=False, na=False) |
+        books_df['genre'].str.contains(search_query, case=False, na=False)
+    ].copy()
+else:
+    filtered_df = books_df.copy()
+
+# Sort by Year Read Descending
+filtered_df = filtered_df.sort_values('Year Read', ascending=False)
+
+filtered_df['Star Rating'] = filtered_df['stars'].apply(get_star_string)
+display_cols = ['title', 'author', 'genre', 'Star Rating', 'Year Read']
+
+tab1, tab2, tab3, tab4 = st.tabs(["All Books", "⭐⭐ Loved", "⭐ Liked", "Unrated/Neutral"])
+
+# Column configuration to remove commas from years
+column_config = {
+    "Year Read": st.column_config.NumberColumn("Year Read", format="%d")
+}
+
+with tab1:
+    st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True, column_config=column_config)
+
+with tab2:
+    st.dataframe(filtered_df[filtered_df['stars'] == 2][display_cols], use_container_width=True, hide_index=True, column_config=column_config)
+
+with tab3:
+    st.dataframe(filtered_df[filtered_df['stars'] == 1][display_cols], use_container_width=True, hide_index=True, column_config=column_config)
+
+with tab4:
+    st.dataframe(filtered_df[filtered_df['stars'] == 0][display_cols], use_container_width=True, hide_index=True, column_config=column_config)
+
+
+
